@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Direct P2P Streaming Viewer</title>
+    <!-- Include PeerJS Library -->
+     <!-- <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script> -->
+    <script src="peerjs.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #222; color: #fff; text-align: center; }
+        video { background: #000; width: 480px; height: 360px; margin-top: 10px; border-radius: 4px; }
+        .box { background: #333; padding: 15px; margin: 10px auto; max-width: 500px; border-radius: 8px; }
+        button { padding: 6px 12px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <h2>Direct P2P Stream (WebRTC)</h2>
+
+    <div class="box">
+        <p>Your Peer ID: <strong id="my-id" style="color: #00ffcc;">Assigning...</strong></p>
+        <p>Share this ID with the other user.</p>
+    </div>
+
+    <div class="box">
+        <input type="text" id="remote-id" placeholder="Paste Remote Peer ID here" style="padding: 6px; width: 200px;" />
+        <button id="connect-btn">Start Streaming Video</button>
+    </div>
+
+    <div>
+        <h3>Live Video Feed</h3>
+        <video id="remote-video" autoplay playsinline controls></video>
+        <p id="status">Status: Waiting for connection...</p>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const remoteVideo = document.getElementById('remote-video');
+        
+        // 1. Initialize PeerJS connection to the Free Public Cloud Broker
+        const peer = new Peer({
+            debug: 1 // Logs errors to console
+        });
+
+        // Display your assigned random ID
+        peer.on('open', (id) => {
+            document.getElementById('my-id').innerText = id;
+            statusEl.innerText = "Status: Ready. Waiting for connection or call.";
+        });
+
+        // 2. SENDER PATH: When clicking "Start Streaming", grab webcam and call peer
+        document.getElementById('connect-btn').addEventListener('click', async () => {
+            const targetId = document.getElementById('remote-id').value.trim();
+            if (!targetId) return alert("Please enter a target Peer ID.");
+
+            statusEl.innerText = "Status: Requesting camera access...";
+            try {
+                // Grab the media stream directly from user hardware
+                const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                
+                statusEl.innerText = "Status: Initiating P2P call...";
+                const call = peer.call(targetId, localStream);
+                
+                // If they stream back, display it
+                call.on('stream', (incomingStream) => {
+                    remoteVideo.srcObject = incomingStream;
+                    statusEl.innerText = "Status: P2P Connected (Streaming out)";
+                });
+            } catch (err) {
+                console.error("Failed to get local stream", err);
+                statusEl.innerText = "Status: Camera access denied or connection failed.";
+            }
+        });
+
+        // 3. RECEIVER PATH: Listen for incoming P2P streams
+        peer.on('call', (call) => {
+            statusEl.innerText = "Status: Incoming call. Connecting P2P stream...";
+            
+            // Answer the call without sending a local stream back (one-way viewing)
+            call.answer(); 
+            
+            // Receive the raw P2P media track
+            call.on('stream', (incomingStream) => {
+                remoteVideo.srcObject = incomingStream;
+                statusEl.innerText = "Status: P2P Connected (Receiving Stream)";
+            });
+        });
+
+        peer.on('error', (err) => {
+            console.error("PeerJS Error:", err);
+            statusEl.innerText = `Status: Error (${err.type})`;
+        });
+    </script>
+</body>
+</html>
